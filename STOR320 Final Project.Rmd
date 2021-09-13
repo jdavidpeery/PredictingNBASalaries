@@ -1,0 +1,583 @@
+---
+title: "Final Project"
+author: "STOR 320.02 Group 2"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output: html_document
+
+---
+# INTRODUCTION
+
+One cannot deny that sports hold a massive entertainment value in today’s world. While baseball may be America’s national sport, the basketball community has arguably had a greater impact on American citizens. Given how much importance we give to the NBA, it’s not a surprise that its players are paid millions of dollars. One of the greatest to ever play is Michael Jordan. Hailing from Chapel Hill, Jordan remains a staple name in the basketball community and in the world. With our analysis we hope to answer two questions:
+
+1) Can we predict whether a player will switch teams in his third year based on his performance in his first two years?  
+2) How well can we predict NBA player salary based off of their previous season’s performance?
+	
+We started out with a simple dataset that we web scrapped to create. Our initial dataset utilized the season statistics for all the players in the NBA from the 2008 -’09 season to the 2018 -’19 season. Utilizing this dataset, we devised the first question with the hopes of discovering whether there is a relationship between a player’s performance and the probability that the player switches teams during the early years of his career. We believe that these results can be used to help NBA general managers estimate how likely it is that a player will want to leave the team they’re currently on. Knowing which players are most likely to switch could help managers make more informed decisions with regards to retaining their current players or recruiting players from another team. As we dove deeper into our initial dataset, we decided to expand our selection to include the salaries of all the players that made up our dataset. 
+
+This led us to our second question as we wanted to see if there is a relationship between player performance and salary. We believe having a prediction of salary for the next year would be useful for the players in the NBA and for contract managers. Contract managers could have a good idea of how much they would need to offer a player to convince them to come to or stay on their team. If a player knows how much they should be paid, they will be better able to negotiate a fair salary and make a better informed decision about whether to accept an offer from a team or look for a better one. NBA players sign a two-year contract when they begin their career and then in their third year they can make a new contract with a new or different team, at which point their salary and team can and usually does change. Therefore, we decided to make our predictions on their third year salary and team switching based on their performance and salary in their first two years.  
+	
+With these two questions, we expect to learn a lot that can help NBA teams select players and navigate the draft better, and help the current NBA players figure out what to expect of their next season. If there is a predictive measure and connection, general managers would seek that information to help them make informed and well thought out decisions regarding their picks to help make their teams successful for that season and players can understand what they need to do to increase their salaries. Ultimately, our analysis is mutually beneficial for both the team managers and the players. 
+
+# DATA
+
+While searching for our data, we started by analyzing Michael Jordan’s performance over the years. As we learned more about Jordan’s performance, we realized that to be able to make good predictions on other players, we needed a larger sample. This led us to find our NBA dataset that covers the performance of every player in the league from the ‘08-’09 season to the ‘18-’19 season. 
+
+Specifically, our NBA dataset came from basketball.realgm.com. This website contains season statistics for a variety of sports, scraped from the professional league of that sport, in our case, the National Basketball Association. We web scraped this information, grouped by season, into an RMD to create a dataset with 4,762 observations. Each observation represents an NBA players’ traits within a certain season.  We used these variables in our model, to analyze season performance per player and how it changed over time, which is clear in the table highlighting the use of our data.		
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+```
+
+![](/Users/josephpeery/Documents/stor320/Final_Project/abbreviations.png) 
+As we thought further about our analysis and modeling, we decided to incorporate an additional factor of salary. We wanted to explore the salaries of NBA players and how well we can predict salary increases or decreases based on the players performance in the previous season. In further detail, we searched for a dataset that includes the NBA salaries of each player, associated with the NBA dataset we have been analyzing. Our salary data was gathered from Dataworld, but more specifically compiled from Basketballreference.com. This website sources all data and information directly from sportradar, which is the official statistics and data partner of the NBA. Our salary data set originally had 14,163 observations of players, from the 1985 season till the 2017 - 2018 season. Each observation contained the season information, team, and salary earned in that season. Due to the limited information about the 2019-2020 season, we were unfortunately unable to create predictions about the 2021 - 2022 season. Given the variation between our number of seasons from the player dataset to the salary dataset, we had to clean up and merge our data, which is evident in the figure below.
+
+
+
+Our final data set was merged from our original two datasets, combining the player data with the salary entries. In our final data set we have 4,369 observations. While cleaning the data, we removed observations of players that switched seasons mid year, since we were looking to predict on players who stayed on the same team throughout their first two years in the NBA. You can see in the table below, the information is grouped by player, with the game statistics from the NBA dataset, and the salary information per season. We shortened the figure to preview the data, but in our model, we used the variables mentioned in the previous paragraph regarding our NBA player observation dataset.
+```{r, warning = FALSE, message = FALSE, include = F}
+library(kableExtra)
+library(readr)
+salary_and_stats <- read.csv("/Users/josephpeery/Documents/stor320/Final_Project/salary_and_stats.csv")
+firstThreeYears <- read.csv("/Users/josephpeery/Documents/stor320/Final_Project/firstThreeYears.csv")
+```
+
+```{r, echo = F}
+salary_and_stats[1:10, c(1:5,8:19,31)] %>%
+  kbl() %>%
+  kable_styling(bootstrap_options = c("condensed","striped"), full_width = F, position = "center")
+```
+```{r, include = F}
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(gganimate)
+library(gapminder)
+library(gifski)
+```
+
+```{r, include = F}
+df <- read.csv('/Users/josephpeery/Documents/stor320/Final_Project/STOR 305 - salary data.xlsx - Player Salaries.csv')
+```
+
+```{r, include = F}
+df2 <- df%>%
+  mutate(`Salary.in..`=str_replace_all(`Salary.in..`,"[\\$]","")) %>%
+  mutate(`Salary.in..`=str_replace_all(`Salary.in..`,"[,]","")) %>% 
+  mutate(Salary = as.numeric(`Salary.in..`))
+head(df2)
+```
+
+
+
+```{r, echo = F, warning = F, message = F}
+p <- ggplot(df2, warning = F) +
+  geom_histogram( mapping = aes(Salary), fill = "#4B9CD3") +
+  transition_time(Season.Start) +
+  labs(title = "Beginning of Season: {frame_time}")
+p
+```
+
+In continuation, our final dataset was designed so that each row contained one player’s first two years of performance statistics and salary, and the team they played on and their salary in the third year.  We determined if a player was a rookie in a given year by checking whether there were stats for them in our dataset for the previous year.  We only kept players that had data for all of their first seasons to create our models.  We also created a separate dataset for players whose second year in the NBA was the last year in our dataset, to predict what their salary would be.
+```{r, echo = F}
+firstThreeYears[1:10, c(1:6,26,28:30,50:53)] %>%
+  kbl() %>%
+  kable_styling(bootstrap_options = c("striped","condensed"), full_width = F, position = "center")
+```
+
+# RESULTS
+
+Our first question involved predicting the likelihood that a player will switch teams for their third year based on the performance and salary from their first two years in the NBA. We started with a “dummy” model that assumed all predictions to be false. The accuracy for the dummy model came out to be  58.92116%. We began the process of selecting features to incorporate in our model by choosing the features that were most correlated with whether a player switched. The four predictors with the highest correlation were, in order, PPG S2, FGM S2, PF S2, and MPG S2. We created four different models using the most, two most, three most, and four most correlated variables. We created these models using 10 fold cross validation and logistic regression to determine the accuracy of each model with each successive predictor added. We then used a for loop that made many 5-predictor models that all used the four previously stated predictors, plus one feature out of a list of all the rest of the features at each iteration of the for loop. We made sure not to use variables from season 3 to avoid data leakage. We decided to keep the feature that gave us the highest accuracy when cross validated. We repeated this methodology, and kept adding predictors to increase the accuracy of our model until the accuracy began to decrease. Our best model predicted the probability that a player would switch teams after two seasons in the NBA at 68.87967% accuracy. This model included the predictors PPG S2, FGM S2, PF S2, MPG S2, Team S2, and Team S1. To visualize the increase in accuracy trend, we created a bar plot that showed the accuracy for each model with each successive predictor added in addition to the model where the accuracy began to decrease.
+
+
+
+```{r, include = F}
+library(readr)
+library(leaps)
+library(tidyverse)
+library(dplyr)
+library(mosaic)
+library(car)
+library(glmnet)
+library(broom)
+library(modelr)
+
+setwd("/Users/josephpeery/Documents/stor320/Final_Project/")
+
+SalaryAndStats <- read_csv("salary_and_stats.csv")
+
+SalaryAndStats = SalaryAndStats %>%
+  mutate(Salary.in..=str_replace_all(Salary.in..,"[\\$]","")) %>%
+  mutate(Salary.in..=str_replace_all(Salary.in..,"[,]",""))
+
+FirstThreeYears <- read_csv("firstThreeYears.csv")
+
+SalaryAndStats
+
+FirstThreeYears
+
+SalaryAndStats$Team = factor(SalaryAndStats$Team)
+
+SalaryAndStats.2 <- select(SalaryAndStats, c(3,8:28,31))
+
+FirstThreeYears.2 <- FirstThreeYears %>%
+  mutate(`Salary.in.. S1`=str_replace_all(`Salary.in.. S1`,"[\\$]","")) %>%
+  mutate(`Salary.in.. S1`=str_replace_all(`Salary.in.. S1`,"[,]","")) %>%
+  mutate(`Salary.in.. S2`=str_replace_all(`Salary.in.. S2`,"[\\$]","")) %>%
+  mutate(`Salary.in.. S2`=str_replace_all(`Salary.in.. S2`,"[,]","")) %>%
+  mutate(`Salary.in.. S3`=str_replace_all(`Salary.in.. S3`,"[\\$]","")) %>%
+  mutate(`Salary.in.. S3`=str_replace_all(`Salary.in.. S3`,"[,]",""))
+
+FirstThreeYears.2
+
+FirstThreeYears.2 = FirstThreeYears.2 %>%
+  mutate_at(c(26), as.numeric) %>%
+  mutate_at(c(50), as.numeric) %>%
+  mutate_at(c(51), as.numeric)%>% 
+  mutate(`Team S1` = ifelse(`Team S1` == 'NJN', 'BRK', `Team S1`)) %>% 
+  mutate(`Team S2` = ifelse(`Team S2` == 'NJN', 'BRK', `Team S2`)) %>% 
+  mutate(`Team S3` = ifelse(`Team S3` == 'NJN', 'BRK', `Team S3`)) 
+
+
+FirstThreeYears.2$`Team S1` = factor(FirstThreeYears.2$`Team S1`)
+FirstThreeYears.2$`Team S2` = factor(FirstThreeYears.2$`Team S2`)
+FirstThreeYears.2$`Team S3` = factor(FirstThreeYears.2$`Team S3`)
+
+FirstThreeYears.3 <- select(FirstThreeYears.2, c(3:53))
+DATA = FirstThreeYears.3
+DATA %>% filter(`Team S1` == 'NJN')
+```
+```{r,include = F}
+train.model.func=function(data){
+  mod=glm(`Switched`~.,family=binomial(), data=data)#change to logistic, change salary to switched
+  return(mod)
+}
+```
+
+```{r,include = F}
+to_remove = c("X1","Name","Salary.in.. S3","Team S3","Switched",'PPG S2','FGM S2','PF S2', 'MPG S2')# take out any best features you choose to use and anything from S3
+possible_features = colnames(DATA)[!(colnames(DATA) %in% to_remove)]
+#possible_features
+```
+
+```{r,include = F}
+featuresAccuracy <- data.frame(possible_features)
+featuresAccuracy$Accuracy <- NA
+rownames(featuresAccuracy) <- featuresAccuracy$possible_features
+#featuresAccuracy
+```
+
+
+
+```{r,include = F}
+set.seed(123)
+for(i in possible_features) {
+
+  desired_features = DATA %>% 
+    select('PPG S2','FGM S2','PF S2', 'MPG S2', 'Switched', i)#will have to change this, instead of Salary.in.. S3 set it to Switched, which we'll be predicting.  Replace the first four with whatever you find your best models to be
+  #print(desired_features)
+  if (i == 'Team S2') {
+    print((DATA %>% filter(`Team S2` == 'NJN')))
+  }
+  
+  DATA3=desired_features %>% crossv_kfold(10)
+  
+  DATA4=DATA3 %>% 
+         mutate(tr.model=map(train,train.model.func)) 
+  
+  #print(head(DATA4))
+  DATA4.PREDICT = DATA4 %>% 
+          mutate(predict=map2(test,tr.model,~augment(.y,newdata=.x))) %>%
+          select(predict) %>% 
+          unnest(cols = c(predict)) %>% mutate(accuracy = (.fitted>.5) == Switched) %>% 
+          mutate(trashModelAccuracy = Switched == FALSE)
+  #print(head(DATA4.PREDICT))
+  featuresAccuracy[i,'accuracy'] = 
+    mean(DATA4.PREDICT$accuracy)#this you'll hve to change to find accuracy instead of RMSE
+  #print(RMSE.func(actual=DATA4.PREDICT$`Salary.in.. S3`,predict=DATA4.PREDICT$.fitted))
+  #print(featuresAccuracy)
+}
+```
+```{r,include = F}
+#featuresAccuracy %>% arrange(desc(accuracy))
+```
+
+```{r,include = F}
+set.seed(123)
+desired_features = DATA %>% 
+    select('PPG S2','FGM S2','PF S2','MPG S2', 'Switched', `Team S2`, `Team S1`)
+
+
+  DATA3=desired_features %>% crossv_kfold(10)
+  
+  DATA4=DATA3 %>% 
+         mutate(tr.model=map(train,train.model.func)) 
+  
+  DATA4.PREDICT = DATA4 %>% 
+          mutate(predict=map2(test,tr.model,~augment(.y,newdata=.x))) %>%
+          select(predict) %>% 
+          unnest(cols = c(predict)) %>% mutate(accuracy = (.fitted>.5) == Switched) %>% 
+          mutate(trashModelAccuracy = Switched == FALSE)
+    mean(DATA4.PREDICT$trashModelAccuracy)
+#We started with PPG S2','FGM S2','PF S2', 'MPG S2'
+
+```
+
+
+
+```{r,echo = F}
+Accuracies <- c(.5892116, .593361, .593361, .6099585, .6141079, .6680498, .6887967, .6763485)
+Features <- c('Dummy', "PPG S2", 'FGM S2', 'PF S2', 'MPG S2', 'Team S2', 'Team S1', 'X3PA S1')
+Features <- factor(Features, levels = c('Dummy', "PPG S2", 'FGM S2', 'PF S2', 'MPG S2', 'Team S2', 'Team S1', 'X3PA S1'))
+
+accuracyplot <- ggplot() +
+  geom_bar(mapping=aes(Features, Accuracies), stat="identity", fill="#4B9CD3")
+accuracyplot
+```
+
+For our second figure, we created a true/false contingency table based on the predictions that a player switches teams for their third season and whether or not they actually switched teams. We utilized the kable package to create this table, and the results are as follows: 43 true positives, 19 false positives, 123 true negatives, and 56 false negatives.
+
+```{r,echo = F}
+DATA5.PREDICT <- DATA4.PREDICT %>% mutate(prediction = .fitted >.5)
+library(xtable)
+library(knitr)
+#nrow(DATA5.PREDICT %>%  filter(Switched == T & prediction == T)) 
+#nrow(DATA5.PREDICT %>%  filter(Switched == T & prediction == F))
+#nrow(DATA5.PREDICT %>%  filter(Switched == F & prediction == F))
+#nrow(DATA5.PREDICT %>%  filter(Switched == F & prediction == T))
+
+kable(table(DATA5.PREDICT$Switched, DATA5.PREDICT$prediction),format="html", caption = "Actual vs Predicted Contingency for Accurate Model", col.names = c("predF", "predT"))
+  
+options(xtable.floating = FALSE)
+options(xtable.timestamp = "")
+
+```
+
+
+```{r, include = FALSE}
+#HERE STARTS BRYCE'S PART
+library(readr)
+library(leaps)
+library(tidyverse)
+library(dplyr)
+library(mosaic)
+library(car)
+library(glmnet)
+
+setwd('/Users/josephpeery/Documents/stor320/Final_Project/')
+
+SalaryAndStats <- read_csv("salary_and_stats.csv")
+
+SalaryAndStats = SalaryAndStats %>%
+  mutate(Salary.in..=str_replace_all(Salary.in..,"[\\$]","")) %>%
+  mutate(Salary.in..=str_replace_all(Salary.in..,"[,]",""))
+
+FirstThreeYears <- read_csv("firstThreeYears.csv")
+
+SalaryAndStats
+
+FirstThreeYears
+
+SalaryAndStats$Team = factor(SalaryAndStats$Team)
+
+SalaryAndStats.2 <- select(SalaryAndStats, c(3,8:28,31))
+
+FirstThreeYears.2 <- FirstThreeYears %>%
+  mutate(`Salary.in.. S1`=str_replace_all(`Salary.in.. S1`,"[\\$]","")) %>%
+  mutate(`Salary.in.. S1`=str_replace_all(`Salary.in.. S1`,"[,]","")) %>%
+  mutate(`Salary.in.. S2`=str_replace_all(`Salary.in.. S2`,"[\\$]","")) %>%
+  mutate(`Salary.in.. S2`=str_replace_all(`Salary.in.. S2`,"[,]","")) %>%
+  mutate(`Salary.in.. S3`=str_replace_all(`Salary.in.. S3`,"[\\$]","")) %>%
+  mutate(`Salary.in.. S3`=str_replace_all(`Salary.in.. S3`,"[,]",""))
+
+FirstThreeYears.2
+
+FirstThreeYears.2 = FirstThreeYears.2 %>%
+  mutate_at(c(26), as.numeric) %>%
+  mutate_at(c(50), as.numeric) %>%
+  mutate_at(c(51), as.numeric) %>%
+  mutate(`Team S1` = ifelse(`Team S1` == 'NJN', 'BRK', `Team S1`)) %>%
+  mutate(`Team S2` = ifelse(`Team S2` == 'NJN', 'BRK', `Team S2`)) %>%
+  mutate(`Team S3` = ifelse(`Team S3` == 'NJN', 'BRK', `Team S3`))
+
+
+FirstThreeYears.2$`Team S1` = factor(FirstThreeYears.2$`Team S1`)
+FirstThreeYears.2$`Team S2` = factor(FirstThreeYears.2$`Team S2`)
+FirstThreeYears.2$`Team S3` = factor(FirstThreeYears.2$`Team S3`)
+
+FirstThreeYears.3 <- select(FirstThreeYears.2, c(3:52))
+FirstThreeYears.3
+DATA = FirstThreeYears.3
+
+RMSE.func=function(actual,predict){
+  mse=mean((actual-predict)^2, na.rm=T)
+  rmse=sqrt(mse)
+  return(rmse)
+}
+```
+
+
+
+```{r, include = FALSE}
+train.model.func=function(data){
+  mod=lm(`Salary.in.. S3`~.,data=data)#change to logistic, change salary to switched
+  return(mod)
+}
+```
+
+```{r, include = FALSE}
+to_remove = c("X1","Name","Salary.in.. S3","Team S3","Switched","Salary.in.. S2","Salary.in.. S1","Player.Rank S1","Player.Rank S2", "TOV S1", "PF S1", "PPG S1", "APG S1", "BPG S1")# take out any best features you choose to use and anything from S3
+possible_features = colnames(DATA)[!(colnames(DATA) %in% to_remove)]
+possible_features
+```
+```{r, include = FALSE}
+featuresRMSE <- data.frame(possible_features)
+featuresRMSE$RMSE <- NA
+rownames(featuresRMSE) <- featuresRMSE$possible_features
+featuresRMSE
+```
+
+```{r, include = FALSE}
+set.seed(11132020)
+for(i in possible_features) {
+
+  desired_features = DATA %>% 
+    select("Player.Rank S1","Salary.in.. S1", "Player.Rank S2","Salary.in.. S2", "TOV S1", "PF S1", "PPG S1", "APG S1", "BPG S1", i, "Salary.in.. S3")#will have to change this, instead of Salary.in.. S3 set it to Switched, which we'll be predicting.  Replace the first four with whatever you find your best models to be
+  #print(desired_features)
+  DATA3=desired_features %>% crossv_kfold(10)
+  
+  DATA4=DATA3 %>% 
+         mutate(tr.model=map(train,train.model.func))
+  
+  #head(DATA4)
+  DATA4.PREDICT = DATA4 %>% 
+          mutate(predict=map2(test,tr.model,~augment(.y,newdata=.x))) %>%
+          select(predict) %>%
+          unnest(cols = c(predict))
+  #head(DATA4.PREDICT)
+  featuresRMSE[i,'RMSE'] = RMSE.func(actual=DATA4.PREDICT$`Salary.in.. S3`,predict=DATA4.PREDICT$.fitted)#this you'll hve to change to find accuracy instead of RMSE
+  #print(RMSE.func(actual=DATA4.PREDICT$`Salary.in.. S3`,predict=DATA4.PREDICT$.fitted))
+}
+```
+
+```{r, include = FALSE}
+featuresRMSE %>% arrange(RMSE)
+```
+
+```{r, include = FALSE}
+part1.mod1 <- lm(`Salary.in.. S3` ~ `Player.Rank S1` + `Salary.in.. S1` + `Player.Rank S2` + `Salary.in.. S2` + `TOV S1` + `PF S1` + `PPG S1` + `APG S1` + `BPG S1`, data = DATA)
+summary(part1.mod1)
+```
+
+```{r, include = FALSE}
+#*Part 2:*
+to_remove2 = c("X1","Name","Salary.in.. S3","Team S3","Switched", "Salary.in.. S2", "MPG S2", "TOV S2", "FG. S2", "Salary.in.. S1", "ORB S2")# take out any best features you choose to use and anything from S3
+possible_features2 = colnames(DATA)[!(colnames(DATA) %in% to_remove2)]
+possible_features2
+```
+
+```{r, include = FALSE}
+featuresRMSE2 <- data.frame(possible_features2)
+featuresRMSE2$RMSE <- NA
+rownames(featuresRMSE2) <- featuresRMSE2$possible_features2
+featuresRMSE2
+```
+
+
+```{r, include = FALSE}
+set.seed(3200)
+for(i in possible_features2) {
+
+  desired_features2 = DATA %>% 
+    select("Salary.in.. S2", "MPG S2", "TOV S2", "FG. S2", "Salary.in.. S1", "ORB S2", i, "Salary.in.. S3")#will have to change this, instead of Salary.in.. S3 set it to Switched, which we'll be predicting.  Replace the first four with whatever you find your best models to be
+  #print(desired_features)
+  DATA3.2=desired_features2 %>% crossv_kfold(10)
+  
+  DATA4.2=DATA3.2 %>% 
+         mutate(tr.model=map(train,train.model.func))
+  
+  #head(DATA4)
+  DATA4.2.PREDICT = DATA4.2 %>% 
+          mutate(predict=map2(test,tr.model,~augment(.y,newdata=.x))) %>%
+          select(predict) %>%
+          unnest(cols = c(predict))
+  #head(DATA4.PREDICT)
+  featuresRMSE2[i,'RMSE'] = RMSE.func(actual=DATA4.2.PREDICT$`Salary.in.. S3`,predict=DATA4.2.PREDICT$.fitted)#this you'll hve to change to find accuracy instead of RMSE
+  #print(RMSE.func(actual=DATA4.PREDICT$`Salary.in.. S3`,predict=DATA4.PREDICT$.fitted))
+}
+```
+
+```{r, include = FALSE}
+featuresRMSE2 %>% arrange(RMSE)
+```
+
+```{r, include = FALSE}
+#*Part 3*
+to_remove3 = c("X1","Name","Salary.in.. S3","Team S3","Switched", "Salary.in.. S2", "PF S1", "Salary.in.. S1", "SPG S2","TOV S1", "PPG S2", "APG S1", "TOV S2", "PPG S1", "Season.End S1", "SPG S2", "TOV S1","PPG S2", "APG S1", "TOV S2", "PPG S1", "Season.End S1", "SPG S1", "FTA S1", "Player.Rank S1", "BPG S2", "Season.End S2", "APG S2", "FGA S2", "FTM S2", "GP S1", "RPG S1", "MPG S2", "X3P. S2", "FGA S1", "X3PM S1", "FGM S1", "GP S2", "DRB S1", "FG. S2", "PF S2", "DRB S2", "MPG S1", "X3PA S2", "Player.Rank S2", "FTM S1", "FGM S2", "X3P. S1", "ORB S1", "X3PM S2", "ORB S2", "FT. S2", "X3PA S1", "FTA S2", "RPG S2", "BPG S1", "FT. S1", "FG. S1", "Team S2")# take out any best features you choose to use and anything from S3
+possible_features3 = colnames(DATA)[!(colnames(DATA) %in% c("Salary.in.. S3","Team S3", "Team S2", "Team S1", "FG. S2", "X3PM S2", "ORB S2", "PF S2", "DRB S2", "RPG S2", "APG S2"))]
+possible_features3
+```
+
+```{r, include = FALSE}
+featuresRMSE3 <- data.frame(possible_features3)
+featuresRMSE3$RMSE <- NA
+rownames(featuresRMSE3) <- featuresRMSE3$possible_features3
+featuresRMSE3
+```
+
+```{r, include = FALSE}
+colnames(DATA)
+```
+
+
+```{r, warning = FALSE, include = FALSE}
+set.seed(123)
+for(i in possible_features3) {
+
+  desired_features3 = DATA %>% 
+    select(-c(i, "Team S2", "Team S1", "FG. S2", "X3PM S2", "ORB S2", "PF S2", "DRB S2", "RPG S2", "APG S2"))#will have to change this, instead of Salary.in.. S3 set it to Switched, which we'll be predicting.  Replace the first four with whatever you find your best models to be
+  #print(desired_features)
+  DATA3.3=desired_features3 %>% crossv_kfold(10)
+  
+  DATA4.3=DATA3.3 %>% 
+         mutate(tr.model=map(train,train.model.func))
+  
+  #head(DATA4)
+  DATA4.3.PREDICT = DATA4.3 %>% 
+          mutate(predict=map2(test,tr.model,~augment(.y,newdata=.x))) %>%
+          select(predict) %>%
+          unnest(cols = c(predict))
+  #head(DATA4.PREDICT)
+  featuresRMSE3[i,'RMSE'] = RMSE.func(actual=DATA4.3.PREDICT$`Salary.in.. S3`,predict=DATA4.3.PREDICT$.fitted)#this you'll hve to change to find accuracy instead of RMSE
+  #print(RMSE.func(actual=DATA4.PREDICT$`Salary.in.. S3`,predict=DATA4.PREDICT$.fitted))
+}
+```
+
+```{r, include = FALSE}
+featuresRMSE3 %>% arrange(RMSE)
+```
+
+```{r, include = FALSE}
+#Models
+part1.mod1 <- lm(`Salary.in.. S3` ~ `Player.Rank S1` + `Salary.in.. S1` + `Player.Rank S2` + `Salary.in.. S2` + `TOV S1` + `PF S1` + `PPG S1` + `APG S1` + `BPG S1`, data = DATA)
+summary(part1.mod1)
+RMSE.func(actual=DATA$`Salary.in.. S3`,predict=predict(part1.mod1, DATA))
+
+part2.mod2 <- lm(`Salary.in.. S3` ~ `Salary.in.. S2` + `MPG S2` + `TOV S2` + `FG. S2` + `Salary.in.. S1`+ `ORB S2`, data = DATA)
+summary(part2.mod2)
+RMSE.func(actual=DATA$`Salary.in.. S3`,predict=predict(part2.mod2, DATA))
+
+part3.mod3 <- lm(`Salary.in.. S3` ~ `Salary.in.. S2` + `PF S1` + `Salary.in.. S1` + `SPG S2` + `TOV S1` + `PPG S2` + `APG S1` + `TOV S2` + `PPG S1` + `Season.End S1` + `SPG S1` + `FTA S1` + `Player.Rank S1` + `BPG S2` + `Season.End S2` + `FGA S2` + `FTM S2` + `GP S1` + `RPG S1` + `MPG S2` + `X3P. S2` + `FGA S1` + `X3PM S1` + `FGM S1` + `GP S2` + `DRB S1` + `MPG S1` + `X3PA S2` + `Player.Rank S2` + `FTM S1` + `FGM S2` + `X3P. S1`+ `ORB S1` + `FT. S2` + `X3PA S1` + `FTA S2` + `BPG S1` + `FT. S1` + `FG. S1`, data = DATA)
+summary(part3.mod3)
+RMSE.func(actual=DATA$`Salary.in.. S3`,predict=predict(part3.mod3, DATA))
+
+part4.mod4 <- lm(`Salary.in.. S3` ~ `Salary.in.. S2` + `PF S1` + `Salary.in.. S1` + `SPG S2` + `TOV S1` + `PPG S2` + `APG S1` + `TOV S2` + `PPG S1` + `Season.End S1` + `SPG S2` + `TOV S1` + `PPG S2` + `TOV S2` + `PPG S1` + `Season.End S1` + `SPG S1` + `FTA S1` + `Player.Rank S1` + `BPG S2` + `Season.End S2` + `FGA S2` + `FTM S2` + `GP S1` + `RPG S1` + `MPG S2` + `X3P. S2` + `FGA S1` + `X3PM S1` + `FGM S1` + `GP S2` + `DRB S1` + `MPG S1` + `X3PA S2` + `Player.Rank S2` + `FTM S1` + `FGM S2` + `X3P. S1`+ `ORB S1` + `FT. S2` + `X3PA S1` + `FTA S2` + `BPG S1` + `FT. S1` + `FG. S1` + `Team S2` + `Team S1` + `FG. S2` + `X3PM S2` + `PF S2` + `APG S2`, data = DATA)
+summary(part4.mod4)
+RMSE.func(actual=DATA$`Salary.in.. S3`,predict=predict(part4.mod4, DATA))
+#Figure one
+```
+
+```{r, include =F}
+Models <- c(part1.mod1, part2.mod2, part3.mod3)
+NameModels <- c('part1.mod1', 'part2.mod2', 'part3.mod3')
+RMSEMod <- c(RMSE.func(actual=DATA$`Salary.in.. S3`,predict=predict(part1.mod1, DATA)), RMSE.func(actual=DATA$`Salary.in.. S3`,predict=predict(part2.mod2, DATA)), RMSE.func(actual=DATA$`Salary.in.. S3`,predict=predict(part3.mod3, DATA)))
+
+LowestRMSEMods <- data.frame(NameModels)
+LowestRMSEMods$RMSEMod <- RMSEMod
+LowestRMSEMods
+
+
+
+plot(part1.mod1)
+plot(part2.mod2)
+plot(part3.mod3)
+```
+
+To answer our second question, “How well can we predict NBA player salary based off of their previous season’s performance?”, we used modeling techniques to construct 3 multiple linear models. The modeling technique we used to construct our 3 models was cross validation. We used a 10 fold cross validation method where we had 10 train and test data sets to fit our models. Furthermore, we used the RMSE of each of our models to test the effectiveness of our models. 
+For the first model we constructed, we started out with four initial predictors, Salary S1, Salary S2, Player Rank S1, and Player Rank S2. We chose these four variables because they have by far the strongest correlations with the response variable, Salary S3. From there we created a for loop to iterate through adding one variable to the model one by one and found the lowest RMSE value of each model with the new additional variable. We again made sure not to use variables from season 3 to avoid data leakage. Whichever variable that lowered the RMSE most was added into the model with the other four variables. This pattern was repeated until the RMSE would no longer decrease and become stagnant. From this method we got a model that includes the following predictor variables: Salary S3 = Salary S1 +  Salary S2 + Player Rank S1 + Player Rank S2 + TOV S1 + PF S1 + PPG S1 + APG S1 + BPG S1. The RMSE for this model is 2,268,573. The second model we constructed to predict the variable salary we started with no predictor variables. Once again, we created a for loop to iterate through adding one variable to the model one by one and found the lowest RMSE value of each model with the new additional variable. Whichever variable that lowered the RMSE was added into the model. This pattern was repeated until the RMSE would no longer decrease and become stagnant. This method we got the model: Salary S3 = Salary S2 + MPG S2 + TOV S2 + FG. S2 + Salary S1 + ORB S2. The RMSE for this model is 2,321,732. The third model we constructed to predict the salary we started with all the variables in our dataset. From there we created a for loop to iterate through removing one variable from the model one by one and found the lowest RMSE when the variable was removed from the model. We repeated this pattern until the RMSE would no longer decrease. From this method we got the following model: 
+Salary.in.. S3  =  Salary.in.. S2 + PF S1 + Salary.in.. S1 + SPG S2 + TOV S1 + PPG S2 + APG S1 + TOV S2 + PPG S1 + Season.End S1 + SPG S1   + FTA S1 + Player.Rank S1 + BPG S2 + Season.End S2 + FGA S2 + FTM S2 + GP S1 + RPG S1 + MPG S2 + X3P. S2 + FGA S1 + X3PM S1 + FGM S1 + GP S2 + DRB S1 + MPG S1 + X3PA S2 + Player.Rank S2 + FTM S1 + FGM S2 + X3P. S1+ ORB S1 + FT. S2 + X3PA S1 + FTA S2 + BPG S1 + FT. S1 + FG. S1. 
+The RMSE for this model is 2,073,318.
+
+
+```{r, echo = F}
+ggplot(data = LowestRMSEMods) + geom_col(aes(x = NameModels,y=RMSEMod, fill = NameModels))
+```
+
+
+```{r, include  = FALSE}
+PlayerPredictions <- read_csv("forPredictions.csv")
+
+PlayerPredictions.2 <- PlayerPredictions %>%
+  mutate(`Salary.in.. S1`=str_replace_all(`Salary.in.. S1`,"[\\$]","")) %>%
+  mutate(`Salary.in.. S1`=str_replace_all(`Salary.in.. S1`,"[,]","")) %>%
+  mutate(`Salary.in.. S2`=str_replace_all(`Salary.in.. S2`,"[\\$]","")) %>%
+  mutate(`Salary.in.. S2`=str_replace_all(`Salary.in.. S2`,"[,]","")) %>%
+  mutate(`Salary.in.. S3`=str_replace_all(`Salary.in.. S3`,"[\\$]","")) %>%
+  mutate(`Salary.in.. S3`=str_replace_all(`Salary.in.. S3`,"[,]",""))
+
+PlayerPredictions.2
+
+PlayerPredictions.3 = PlayerPredictions.2 %>%
+  mutate_at(c(26), as.numeric) %>%
+  mutate_at(c(50), as.numeric) %>%
+  mutate_at(c(51), as.numeric)
+
+PlayerPredictions.3
+
+PlayerPredictions.3$`Team S1` = factor(PlayerPredictions.3$`Team S1`)
+PlayerPredictions.3$`Team S2` = factor(PlayerPredictions.3$`Team S2`)
+
+PlayerPredictions.3$`Predicted Salary mod1` <- predict(part1.mod1, PlayerPredictions.3)
+PlayerPredictions.3$`Predicted Salary mod2` <-predict(part2.mod2, PlayerPredictions.3)
+PlayerPredictions.3$`Predicted Salary mod3` <-predict(part3.mod3, PlayerPredictions.3)
+
+PlayerPredictions.3
+
+mean(predict(part1.mod1, PlayerPredictions.3))
+mean(predict(part2.mod2, PlayerPredictions.3))
+mean(predict(part3.mod3, PlayerPredictions.3))
+
+
+set.seed(12252000)
+Rrows <- sample(nrow(PlayerPredictions.3))
+PlayerPredictions.4 <- PlayerPredictions.3[Rrows,]
+PlayerPredictions.5 <- PlayerPredictions.4[1:5,]
+PlayerPredictions.5
+
+
+PlayerPredictions.5$`Salary.in.. S3`[1] <- 1512601
+PlayerPredictions.5$`Salary.in.. S3`[2] <- 2400480
+PlayerPredictions.5$`Salary.in.. S3`[3] <- 738364
+PlayerPredictions.5$`Salary.in.. S3`[4] <- 2947320
+PlayerPredictions.5$`Salary.in.. S3`[5] <- 4544000
+ 
+PlayerPredictions.6 = PlayerPredictions.5 %>%
+  select("Name", "Salary.in.. S3", "Predicted Salary mod1", "Predicted Salary mod2", "Predicted Salary mod3") %>%
+  rename(
+    `Actual Salary` = `Salary.in.. S3`
+  )
+ 
+PlayerPredictions.6$mod1.Residuals <- PlayerPredictions.6$`Actual Salary` - predict(part1.mod1, PlayerPredictions.5)
+PlayerPredictions.6$mod2.Residuals <- PlayerPredictions.6$`Actual Salary` - predict(part2.mod2, PlayerPredictions.5)
+PlayerPredictions.6$mod3.Residuals <- PlayerPredictions.6$`Actual Salary` - predict(part3.mod3, PlayerPredictions.5)
+
+
+
+mean(PlayerPredictions.6$mod1.Residuals)
+mean(PlayerPredictions.6$mod2.Residuals)
+mean(PlayerPredictions.6$mod3.Residuals)
+```
+
+To further test the effectiveness of our three models to predict salary, we created a dataset that includes 66 NBA players from the 2016-2017 and 2017-2018 NBA seasons with their salary and performance stats. From here we took a random sample of 5 players from this data set and used our three models to predict their salary for the 2018-2019 NBA season. Here are the following predictions for the five NBA players: (insert visual). Again, we would have hoped to create predictions for the 2020-2021 season, but enough data wasn’t available as previously mentioned in the data section. Therefore, we made our predictions on the 2018-2019 season and manually looked up the salaries for a few players to see how well our model performed.  From what we see in the table our three models do fairly well at predicting NBA player salaries. Each prediction from our three models has a mean residual of -425,094 for our first model, -340,757.1 for our second model, and -1,052,246 for our third model. From what we see from the table, our third model performs the best at predicting salary since it has the lowest RMSE. This model includes the following predictor variables: 
+Salary.in.. S3  =  Salary.in.. S2 + PF S1 + Salary.in.. S1 + SPG S2 + TOV S1 + PPG S2 + APG S1 + TOV S2 + PPG S1 + Season.End S1 + SPG S1   + FTA S1 + Player.Rank S1 + BPG S2 + Season.End S2 + FGA S2 + FTM S2 + GP S1 + RPG S1 + MPG S2 + X3P. S2 + FGA S1 + X3PM S1 + FGM S1 + GP S2 + DRB S1 + MPG S1 + X3PA S2 + Player.Rank S2 + FTM S1 + FGM S2 + X3P. S1+ ORB S1 + FT. S2 + X3PA S1 + FTA S2 + BPG S1 + FT. S1 + FG. S1.
+
+```{r, echo = F}
+kable(PlayerPredictions.6)
+```
+# CONCLUSION
+
+Resurfacing the purpose of our project, we wanted to answer two questions: “Can we predict whether a player will switch teams in a third year based on the change in his performance from the first to second year?” and “How well can we predict NBA player salary based off of their previous season’s performance?” When answering the first question, we found that our best model predicted whether a player switches teams after the first two seasons with 68.87967% accuracy. This model has 10% better accuracy in relation to our dummy model that assumed all predictions to be false, so there is definitely some predictive value in our model.  However, an accuracy of less than 70% will not be very practically helpful for predicting whether a player will switch teams. In the future, it could be more informative and helpful to develop a model that predicts the probability that a player will switch teams. When answering our second question, our third model did the best at predicting salary based on the performance stats and salary from the past two seasons with a RMSE of 2,073,318. The third model has the most predictor variables compared to the other two models. The predictor variables we are most shocked that were included in this model were Season End S1 and Season End S2. We didn’t really think the year would be a factor in predicting salary, but it ended up being important. Our model performs decently, but could be improved by adding in other variables that are not a part of this dataset.
+
+In the basketball world, players and team managers would value this information. In the NBA, not only do team managers have to make big decisions during the Draft, but throughout the season, anything can happen with players contracts and teams. It is a team manager’s job to make sure that they are drafting and offering deals to players that will be a real asset for their team to win, and ideally stay with their team. As a player, knowing what factors might impact their salary is beneficial for their game and their career. There is an opportunity here for players to sign onto teams that are truly offering them the best deal, and for contract managers to do their job and make better offers to players that they need. Players' decisions may also be impacted by what they are offered salary wise. As such, knowing that players may switch after their first two years, will help team managers make better decisions regarding what types of contracts to propose to players they want to keep. Players can also make informed decisions regarding their careers. When team managers use our best model they can offer an estimated salary to prospective players. Even though this is a rough estimate it still provides an idea of what the team manager should offer to the NBA player and it provides an idea of what the player should expect. 
+
+When we are considering going forward with our model to continue our work and improve it, we want to extrapolate our model structure to be used for other sports leagues as well, for instance the WNBA or the MLB. However, staying in the scope of improving this project, while focusing on salary, to improve the model we could add a confidence and prediction interval to get a wider range of where the salary of each NBA player should be.  Since the RMSE was somewhat high, a confidence interval could be a more useful prediction than a simple prediction. We also didn’t take into consideration personal motives for switching teams. This includes, but is not limited to, players switching teams to be closer to home due to sick family members or players switching teams to be closer to where their kids live. It could also be interesting to expand our analysis beyond predicting what salary would be beyond the third year. However, to do this, you would have to find data that includes when a player’s contract expires, since players sign multi-year contracts and their salary is predictable with 100% accuracy in some years since it is independent of their performance, and will simply be what is in the contract. Moving back to predicting if players will switch teams, we know that 69% accuracy is not the most practical for making these predictions in real-world applications. However, this is a good starting point for building models in the future that predict the actual probability that players switch teams for their third season instead of true/false predictions. The accuracy could also be improved if other variables not listed are included. One variable that could be added to the dataset is the record of the team from the prior season that a player switches to; if that team has a good win/loss record from the previous season, a player will have more incentive to sign with that team in an effort to win a championship. With this variable added, we could expect our accuracy to improve. 
+
+
